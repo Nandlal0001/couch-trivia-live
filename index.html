@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CouchTrivia Live - Fire TV Edition</title>
+  <style>
+    :root {
+      --bg: #0b0e17;
+      --card-bg: #161b2b;
+      --card-focus: #1f273d;
+      --accent: #00e5ff;
+      --accent-glow: rgba(0, 229, 255, 0.45);
+      --correct: #00e676;
+      --wrong: #ff1744;
+      --text: #ffffff;
+      --text-dim: #8c9ba5;
+    }
+
+    * { box-sizing: border-box; user-select: none; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 5% Overscan Safe Zone */
+    #tv-stage {
+      flex: 1;
+      padding: 5vh 5vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    #overscan-guide {
+      position: absolute;
+      top: 5vh; bottom: 5vh; left: 5vw; right: 5vw;
+      border: 2px dashed rgba(255, 235, 59, 0.4);
+      pointer-events: none;
+      display: none;
+      z-index: 100;
+    }
+
+    /* Top Bar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .brand { font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: 1px; }
+    .brand span { color: #fff; }
+    .hud-stats { display: flex; gap: 20px; }
+    .score-badge {
+      background: var(--card-bg);
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 18px;
+      border: 1px solid #2d3748;
+    }
+
+    /* Question Card */
+    #question-box {
+      background: linear-gradient(145deg, #161b2b, #121624);
+      border-radius: 16px;
+      padding: 30px;
+      text-align: center;
+      border: 1px solid #28334e;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    #question-text {
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.3;
+      margin: 0 0 15px 0;
+    }
+    #timer-bar-wrap {
+      width: 100%;
+      height: 8px;
+      background: #232936;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #timer-bar {
+      width: 100%;
+      height: 100%;
+      background: var(--accent);
+      transition: width 1s linear;
+    }
+
+    /* 4-Option Grid (10-ft TV Layout) */
+    #options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 25px;
+    }
+    .option-card {
+      background: var(--card-bg);
+      border: 3px solid transparent;
+      border-radius: 14px;
+      padding: 22px 28px;
+      font-size: 22px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .option-key {
+      background: #252e42;
+      color: var(--accent);
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-weight: bold;
+    }
+    /* D-pad active focus state */
+    .option-card.focused {
+      border-color: var(--accent);
+      background: var(--card-focus);
+      transform: scale(1.04);
+      box-shadow: 0 0 25px var(--accent-glow);
+    }
+    .option-card.correct {
+      border-color: var(--correct) !important;
+      background: rgba(0, 230, 118, 0.2) !important;
+    }
+    .option-card.wrong {
+      border-color: var(--wrong) !important;
+      background: rgba(255, 23, 68, 0.2) !important;
+    }
+
+    /* Bottom Multi-Modal & Voice Bar */
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0d111c;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-size: 15px;
+      color: var(--text-dim);
+    }
+    .voice-hint {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #fff;
+    }
+    .mic-icon {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ff3d00;
+      display: inline-block;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 61, 0, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(255, 61, 0, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 61, 0, 0); }
+    }
+
+    /* Virtual Remote Controller overlay for browser testing */
+    #virtual-remote {
+      position: fixed;
+      bottom: 25px;
+      right: 25px;
+      background: rgba(20, 24, 38, 0.95);
+      border: 1px solid #333d54;
+      padding: 16px;
+      border-radius: 20px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      z-index: 999;
+    }
+    .remote-title { font-size: 11px; text-transform: uppercase; color: var(--text-dim); letter-spacing: 1px; }
+    .dpad-row { display: flex; gap: 8px; }
+    .remote-btn {
+      width: 44px;
+      height: 44px;
+      background: #252d40;
+      border: 1px solid #3d4966;
+      color: #fff;
+      border-radius: 10px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .remote-btn:active { background: var(--accent); color: #000; }
+  </style>
+</head>
+<body>
+
+  <div id="tv-stage">
+    <div id="overscan-guide"></div>
+
+    <header>
+      <div class="brand">CouchTrivia <span>LIVE</span></div>
+      <div class="hud-stats">
+        <div class="score-badge">Dad: <span id="score-dad">0</span></div>
+        <div class="score-badge">Mom: <span id="score-mom">0</span></div>
+        <div class="score-badge">Kids: <span id="score-kids">0</span></div>
+      </div>
+    </header>
+
+    <main>
+      <div id="question-box">
+        <h1 id="question-text">Loading trivia challenge...</h1>
+        <div id="timer-bar-wrap">
+          <div id="timer-bar"></div>
+        </div>
+      </div>
+
+      <div id="options-grid">
+        <div class="option-card" data-idx="0">
+          <div class="option-key">A</div>
+          <div class="option-val">Option A</div>
+        </div>
+        <div class="option-card" data-idx="1">
+          <div class="option-key">B</div>
+          <div class="option-val">Option B</div>
+        </div>
+        <div class="option-card" data-idx="2">
+          <div class="option-key">C</div>
+          <div class="option-val">Option C</div>
+        </div>
+        <div class="option-card" data-idx="3">
+          <div class="option-key">D</div>
+          <div class="option-val">Option D</div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="voice-hint">
+        <span class="mic-icon"></span>
+        <span>Voice Ready: Say <b>"Alexa, [Answer]"</b> or <b>"Option 1, 2, 3, 4"</b></span>
+      </div>
+      <div>D-Pad: <b>Navigate</b> &nbsp;|&nbsp; Select: <b>Lock In</b> &nbsp;|&nbsp; Press 'O' for <b>Overscan Guide</b></div>
+    </footer>
+  </div>
+
+  <!-- On-Screen Fire TV Remote for Testing -->
+  <div id="virtual-remote">
+    <span class="remote-title">Fire TV Remote</span>
+    <button class="remote-btn" onclick="handleNav('ArrowUp')">▲</button>
+    <div class="dpad-row">
+      <button class="remote-btn" onclick="handleNav('ArrowLeft')">◀</button>
+      <button class="remote-btn" style="background:#00e5ff; color:#000; font-weight:bold;" onclick="handleSelect()">OK</button>
+      <button class="remote-btn" onclick="handleNav('ArrowRight')">▶</button>
+    </div>
+    <button class="remote-btn" onclick="handleNav('ArrowDown')">▼</button>
+    <button class="remote-btn" style="width: 100%; font-size:11px;" onclick="triggerVoiceSim()">🎤 Voice</button>
+  </div>
+
+  <script>
+    // Audio Synthesizer (Zero asset dependencies)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(freq, type = 'sine', duration = 0.15) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    const questions = [
+      { q: "What is the largest moon of Saturn?", options: ["Europa", "Titan", "Ganymede", "Callisto"], answer: 1 },
+      { q: "Which planet in our solar system spins backwards?", options: ["Mars", "Jupiter", "Venus", "Mercury"], answer: 2 },
+      { q: "How long does light from the Sun take to reach Earth?", options: ["8 minutes", "1 hour", "instant", "24 hours"], answer: 0 }
+    ];
+
+    let currentQ = 0;
+    let focusedIndex = 0;
+    let scores = { dad: 0, mom: 0, kids: 10 };
+    let timerWidth = 100;
+    let timerInterval;
+
+    const cards = document.querySelectorAll('.option-card');
+
+    function updateFocus() {
+      cards.forEach((c, idx) => {
+        c.classList.toggle('focused', idx === focusedIndex);
+      });
+      playBeep(440, 'triangle', 0.08);
+    }
+
+    function loadQuestion(idx) {
+      const data = questions[idx];
+      document.getElementById('question-text').innerText = data.q;
+      cards.forEach((card, i) => {
+        card.className = 'option-card';
+        card.querySelector('.option-val').innerText = data.options[i];
+      });
+      focusedIndex = 0;
+      updateFocus();
+      startTimer();
+
+      // Read aloud question (Host Narration)
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(data.q);
+        window.speechSynthesis.speak(msg);
+      }
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      timerWidth = 100;
+      document.getElementById('timer-bar').style.width = '100%';
+      timerInterval = setInterval(() => {
+        timerWidth -= 2;
+        document.getElementById('timer-bar').style.width = timerWidth + '%';
+        if (timerWidth <= 0) {
+          clearInterval(timerInterval);
+          handleNav('ArrowRight'); // Auto bump
+        }
+      }, 300);
+    }
+
+    function handleNav(key) {
+      if (key === 'ArrowRight' && focusedIndex % 2 === 0) focusedIndex += 1;
+      else if (key === 'ArrowLeft' && focusedIndex % 2 === 1) focusedIndex -= 1;
+      else if (key === 'ArrowDown' && focusedIndex < 2) focusedIndex += 2;
+      else if (key === 'ArrowUp' && focusedIndex >= 2) focusedIndex -= 2;
+      updateFocus();
+    }
+
+    function handleSelect() {
+      clearInterval(timerInterval);
+      const isCorrect = focusedIndex === questions[currentQ].answer;
+      if (isCorrect) {
+        cards[focusedIndex].classList.add('correct');
+        playBeep(880, 'sine', 0.3);
+        scores.kids += 10;
+        document.getElementById('score-kids').innerText = scores.kids;
+      } else {
+        cards[focusedIndex].classList.add('wrong');
+        cards[questions[currentQ].answer].classList.add('correct');
+        playBeep(220, 'sawtooth', 0.4);
+      }
+
+      setTimeout(() => {
+        currentQ = (currentQ + 1) % questions.length;
+        loadQuestion(currentQ);
+      }, 2000);
+    }
+
+    // Keyboard / Fire TV D-Pad listener
+    window.addEventListener('keydown', (e) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        handleNav(e.key);
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        handleSelect();
+      } else if (e.key.toLowerCase() === 'o') {
+        const guide = document.getElementById('overscan-guide');
+        guide.style.display = guide.style.display === 'block' ? 'none' : 'block';
+      }
+    });
+
+    // Voice recognition (Alexa Style)
+    function triggerVoiceSim() {
+      const ans = prompt("Simulate Voice. Say an answer (e.g., 'Titan', 'Venus', 'Option 1'):");
+      if (!ans) return;
+      const lower = ans.toLowerCase();
+      questions[currentQ].options.forEach((opt, idx) => {
+        if (lower.includes(opt.toLowerCase()) || lower.includes(`option ${idx+1}`)) {
+          focusedIndex = idx;
+          updateFocus();
+          handleSelect();
+        }
+      });
+    }
+
+    // Start on load
+    loadQuestion(0);
+  </script>
+</body>
+</html>
